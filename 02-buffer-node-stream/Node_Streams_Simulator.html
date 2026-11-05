@@ -1,0 +1,631 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Node Streams Simulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a plant-room control panel. One scene at a time, a big gauge on the left, the moving parts on the right, Node code underneath. */
+:root {
+  --bg: #EEF2F1;
+  --panel: #FAFCFB;
+  --ink: #13222B;
+  --muted: #4F6169;
+  --line: #CBD6D6;
+  --water: #1C6E8C;
+  --water-soft: #D3E8EE;
+  --good: #2C7A4B;
+  --good-soft: #DCEFE3;
+  --danger: #C2410C;
+  --danger-soft: #FBE3D6;
+  --warn: #9A6A00;
+  --code-bg: #13222B;
+  --code-fg: #E2ECEE;
+  --font-display: 'Big Shoulders Display', 'Arial Narrow', Arial, sans-serif;
+  --font-body: 'Atkinson Hyperlegible', Verdana, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E181D; --panel: #15232A; --ink: #E4EEF0; --muted: #9AB0B7; --line: #2A3D45;
+    --water: #5EB8D6; --water-soft: #173A47; --good: #6CC891; --good-soft: #17352A;
+    --danger: #FF8A5B; --danger-soft: #45231A; --warn: #E6B84A; --code-bg: #0A1216; --code-fg: #D6E4E7;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E181D; --panel: #15232A; --ink: #E4EEF0; --muted: #9AB0B7; --line: #2A3D45;
+  --water: #5EB8D6; --water-soft: #173A47; --good: #6CC891; --good-soft: #17352A;
+  --danger: #FF8A5B; --danger-soft: #45231A; --warn: #E6B84A; --code-bg: #0A1216; --code-fg: #D6E4E7;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(36px, 5vw, 56px); line-height: 0.95; margin: 0; letter-spacing: 0.5px; text-transform: uppercase; text-wrap: balance; }
+.sub { color: var(--muted); margin: 6px 0 0; max-width: 60ch; }
+nav { display: flex; gap: 6px; flex-wrap: wrap; }
+nav a {
+  font-weight: 700; text-decoration: none; color: var(--ink); padding: 10px 16px; border-radius: 999px;
+  border: 2px solid var(--line); background: var(--panel); display: inline-flex; gap: 8px; align-items: center;
+}
+nav a .n { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+nav a[aria-current="page"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+nav a[aria-current="page"] .n { color: var(--bg); opacity: 0.7; }
+nav a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--water); outline-offset: 2px; }
+
+.scene { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+.scene-head { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: baseline; justify-content: space-between; }
+.scene-head h2 { font-family: var(--font-display); font-weight: 700; font-size: 32px; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+.scene-head p { margin: 0; color: var(--muted); max-width: 62ch; }
+.map { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.map div { border-top: 3px solid var(--line); padding-top: 8px; font-size: 15px; }
+.map b { display: block; font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; padding: 14px 16px; border-radius: 12px; background: var(--bg); }
+.controls label { font-weight: 700; font-size: 15px; display: flex; gap: 10px; align-items: center; }
+.controls output { font-family: var(--font-mono); font-size: 15px; min-width: 4ch; }
+.seg { display: inline-flex; border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; }
+.seg button { border: 0; background: transparent; color: var(--ink); font: inherit; font-weight: 700; font-size: 15px; padding: 8px 14px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.btn { font: inherit; font-weight: 700; border-radius: 999px; padding: 10px 20px; cursor: pointer; border: 2px solid var(--water); background: var(--water); color: var(--panel); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: var(--panel); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.spacer { flex: 1; }
+input[type="range"] { accent-color: var(--water); width: 140px; }
+select { font: inherit; font-size: 15px; padding: 6px 10px; border-radius: 8px; border: 2px solid var(--line); background: var(--panel); color: var(--ink); }
+
+.stage { display: grid; grid-template-columns: 240px 1fr; gap: 24px; align-items: start; }
+.stage > * { min-width: 0; }
+@media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
+
+/* Memory tank */
+.tank-box { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.tank-label { font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.tank { position: relative; width: 150px; height: 300px; border: 3px solid var(--ink); border-top-width: 0; border-radius: 0 0 22px 22px; overflow: hidden; background: var(--panel); }
+.tank .fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--water); }
+.tank .fill::before { content: ""; position: absolute; left: 0; right: 0; top: -6px; height: 12px; background: var(--water); border-radius: 50%; opacity: 0.6; }
+.tank.over .fill, .tank.over .fill::before { background: var(--danger); }
+.tank .limit { position: absolute; left: -2px; right: -2px; border-top: 3px dashed var(--danger); }
+.tank .limit span { position: absolute; right: 6px; top: 2px; font-size: 12px; font-weight: 700; color: var(--danger); background: var(--panel); padding: 0 4px; }
+.mem-num { font-family: var(--font-display); font-weight: 800; font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; }
+.mem-sub { font-size: 14px; color: var(--muted); text-align: center; }
+
+.banner { border-radius: 12px; padding: 14px 18px; font-weight: 700; display: flex; gap: 12px; align-items: center; }
+.banner.bad { background: var(--danger-soft); color: var(--danger); }
+.banner.ok { background: var(--good-soft); color: var(--good); }
+.banner.info { background: var(--water-soft); color: var(--ink); }
+
+/* Scene 1: users */
+.users { display: flex; flex-direction: column; gap: 8px; }
+.user { display: grid; grid-template-columns: 92px 1fr 190px; gap: 12px; align-items: center; font-size: 15px; }
+.user .who { font-weight: 700; }
+.user .who small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+.bar { height: 16px; background: var(--bg); border-radius: 999px; overflow: hidden; border: 1px solid var(--line); }
+.bar i { display: block; height: 100%; width: 0; background: var(--water); }
+.bar.loading i { background: var(--warn); }
+.bar.dead i { background: var(--danger); }
+.user .st { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+.user .st.bad { color: var(--danger); }
+.user .st.good { color: var(--good); }
+@media (max-width: 560px) { .user { grid-template-columns: 70px 1fr; } .user .st { grid-column: 1 / -1; } }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.stat b { display: block; font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+.stat span { font-family: var(--font-display); font-weight: 800; font-size: 30px; font-variant-numeric: tabular-nums; }
+
+/* Scene 2: kitchen */
+.kitchen { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 16px; align-items: stretch; }
+@media (max-width: 760px) { .kitchen { grid-template-columns: 1fr; } }
+.station { border: 2px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.station h3 { margin: 0; font-family: var(--font-display); font-size: 24px; text-transform: uppercase; letter-spacing: 0.5px; }
+.station p { margin: 0; font-size: 14px; color: var(--muted); }
+.pill { align-self: start; font-weight: 700; font-size: 14px; border-radius: 999px; padding: 4px 12px; background: var(--bg); }
+.pill.go { background: var(--good-soft); color: var(--good); }
+.pill.stop { background: var(--danger-soft); color: var(--danger); }
+.pill.idle { color: var(--muted); }
+.counter { position: relative; min-height: 150px; display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; padding: 10px; border-radius: 10px; background: var(--bg); }
+.plate { width: 26px; height: 26px; border-radius: 50%; background: var(--panel); border: 3px solid var(--water); box-shadow: inset 0 0 0 5px var(--water-soft); }
+.plate.slot { background: transparent; border: 2px dashed var(--line); box-shadow: none; }
+.counter.over .plate { border-color: var(--danger); box-shadow: inset 0 0 0 5px var(--danger-soft); }
+.log { font-family: var(--font-mono); font-size: 13px; background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 10px 12px; min-height: 92px; max-height: 92px; overflow: hidden; display: flex; flex-direction: column-reverse; gap: 2px; }
+.log .p { color: #FF9C73; }
+.log .c { color: #7FD6A4; }
+
+/* Scene 3: assembly line */
+.line-wrap { overflow-x: auto; }
+.line { position: relative; min-width: 620px; height: 210px; }
+.belt { position: absolute; left: 6%; right: 6%; top: 118px; height: 14px; border-radius: 999px; background: repeating-linear-gradient(90deg, var(--line) 0 18px, var(--bg) 18px 30px); }
+.st3 { position: absolute; top: 0; width: 172px; transform: translateX(-50%); border: 2px solid var(--ink); border-radius: 14px; padding: 10px 12px; background: var(--panel); display: flex; flex-direction: column; gap: 4px; z-index: 2; }
+.st3 h3 { margin: 0; font-family: var(--font-display); font-size: 22px; text-transform: uppercase; }
+.st3 code { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.st3 .pill { font-size: 13px; }
+.st3.dead { border-color: var(--danger); }
+.st3.closed { opacity: 0.55; }
+.chunk { position: absolute; top: 108px; width: 30px; height: 30px; margin-left: -15px; border-radius: 6px; background: var(--water); z-index: 1; }
+.chunk.small { width: 18px; height: 18px; top: 114px; margin-left: -9px; }
+.chunk.stuck { background: var(--danger); }
+.chunk.gone { opacity: 0.25; background: var(--muted); }
+.timer { font-family: var(--font-mono); }
+
+pre.code { margin: 0; background: var(--code-bg); color: var(--code-fg); border-radius: 12px; padding: 14px 16px; font-family: var(--font-mono); font-size: 14px; line-height: 1.55; overflow-x: auto; }
+pre.code .k { color: #7FD6A4; }
+pre.code .m { color: #8EA3AA; }
+.code-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.code-grid h4 { margin: 0 0 6px; font-size: 13px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+.code-grid > div { min-width: 0; }
+footer { color: var(--muted); font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Node Streams Simulator</h1>
+      <p class="sub">Three everyday situations. Press Start, change one setting, press Start again, and watch what happens to memory.</p>
+    </div>
+    <nav aria-label="Scenes">
+      <a href="#tank" id="tab-tank"><span class="n">1</span>Download or stream</a>
+      <a href="#kitchen" id="tab-kitchen"><span class="n">2</span>The kitchen</a>
+      <a href="#line" id="tab-line"><span class="n">3</span>Assembly line</a>
+    </nav>
+  </header>
+
+  <!-- SCENE 1 -->
+  <section class="scene" id="scene-tank" aria-labelledby="h-tank">
+    <div class="scene-head">
+      <h2 id="h-tank">1 · Download or stream</h2>
+      <p>Users download the monthly report at the same time. Our server has 2 GB of memory. Does it survive?</p>
+    </div>
+    <div class="map">
+      <div><b>Real world</b>Download the whole movie first, or watch on YouTube while it loads</div>
+      <div><b>In Node</b>readFile() loads it all · a stream sends 64 KB pieces</div>
+      <div><b>Watch</b>The memory tank on the left</div>
+    </div>
+    <div class="controls">
+      <span class="seg" role="group" aria-label="How the server sends the file">
+        <button type="button" id="t-mode-load" aria-pressed="true">Load whole file</button>
+        <button type="button" id="t-mode-stream" aria-pressed="false">Stream it</button>
+      </span>
+      <label for="t-users">Users <input type="range" id="t-users" min="1" max="10" value="5"><output id="t-users-out">5</output></label>
+      <label for="t-size">File size
+        <select id="t-size">
+          <option value="200">200 MB</option>
+          <option value="500" selected>500 MB</option>
+          <option value="2000">2 GB</option>
+        </select>
+      </label>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="t-start">Start</button>
+      <button type="button" class="btn ghost" id="t-reset">Reset</button>
+    </div>
+    <div class="stage">
+      <div class="tank-box">
+        <span class="tank-label">Server memory</span>
+        <div class="tank" id="t-tank"><div class="fill" id="t-fill"></div><div class="limit" id="t-limit"><span>2 GB limit</span></div></div>
+        <span class="mem-num" id="t-mem">60 MB</span>
+        <span class="mem-sub" id="t-peak">peak 60 MB</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <div class="banner info" id="t-banner">Pick a mode and press Start.</div>
+        <div class="users" id="t-users-list"></div>
+        <div class="stats">
+          <div class="stat"><b>First byte after</b><span id="t-ttfb">–</span></div>
+          <div class="stat"><b>Finished</b><span id="t-done">0 / 5</span></div>
+          <div class="stat"><b>Peak memory</b><span id="t-peak2">60 MB</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="code-grid">
+      <div><h4>Load whole file</h4><pre class="code"><span class="k">const</span> data = <span class="k">await</span> readFile(file);  <span class="m">// all of it</span>
+res.end(data);</pre></div>
+      <div><h4>Stream it</h4><pre class="code"><span class="k">await</span> pipeline(createReadStream(file), res);
+<span class="m">// 64 KB at a time, as fast as the user downloads</span></pre></div>
+    </div>
+  </section>
+
+  <!-- SCENE 2 -->
+  <section class="scene" id="scene-kitchen" aria-labelledby="h-kitchen" hidden>
+    <div class="scene-head">
+      <h2 id="h-kitchen">2 · The kitchen</h2>
+      <p>The chef cooks fast. The waiter serves slowly. Plates waiting on the counter are memory. What happens when the waiter can’t say “stop”?</p>
+    </div>
+    <div class="map">
+      <div><b>Real world</b>Chef = producer · waiter = consumer · counter = waiting area</div>
+      <div><b>In Node</b>Counter size is highWaterMark · “stop” is write() returning false · “go” is 'drain'</div>
+      <div><b>Watch</b>The plates piling up on the counter</div>
+    </div>
+    <div class="controls">
+      <span class="seg" role="group" aria-label="Can the waiter say stop">
+        <button type="button" id="k-bp-off" aria-pressed="true">Waiter can’t say stop</button>
+        <button type="button" id="k-bp-on" aria-pressed="false">Backpressure on</button>
+      </span>
+      <label for="k-speed">Waiter speed <input type="range" id="k-speed" min="1.5" max="7" step="0.5" value="3"><output id="k-speed-out">3/s</output></label>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="k-start">Start</button>
+      <button type="button" class="btn ghost" id="k-reset">Reset</button>
+    </div>
+    <div class="banner info" id="k-banner">36 orders are coming in. The chef can cook 8 plates a second.</div>
+    <div class="kitchen">
+      <div class="station">
+        <h3>Chef</h3>
+        <p>Producer · reads the disk</p>
+        <span class="pill idle" id="k-chef">Waiting for orders</span>
+        <div class="stats" style="grid-template-columns:1fr"><div class="stat"><b>Cooked</b><span id="k-cooked">0</span></div></div>
+      </div>
+      <div class="station">
+        <h3>Counter</h3>
+        <p id="k-counter-note">Holds up to 25 plates before they fall off</p>
+        <div class="counter" id="k-counter"></div>
+        <div class="stats"><div class="stat"><b>Waiting now</b><span id="k-wait">0</span></div><div class="stat"><b>Most waiting</b><span id="k-max">0</span></div></div>
+      </div>
+      <div class="station">
+        <h3>Waiter</h3>
+        <p>Consumer · a slow mobile user</p>
+        <span class="pill idle" id="k-waiter">Waiting</span>
+        <div class="stats" style="grid-template-columns:1fr"><div class="stat"><b>Served</b><span id="k-served">0</span></div></div>
+      </div>
+    </div>
+    <div class="log" id="k-log" aria-live="polite"></div>
+    <div class="code-grid">
+      <div><h4>Ignoring the signal</h4><pre class="code"><span class="k">for</span> (<span class="k">const</span> plate <span class="k">of</span> orders) {
+  out.write(plate);  <span class="m">// returns false… ignored</span>
+}</pre></div>
+      <div><h4>Listening to it</h4><pre class="code"><span class="k">for</span> (<span class="k">const</span> plate <span class="k">of</span> orders) {
+  <span class="k">if</span> (!out.write(plate)) <span class="k">await</span> once(out, 'drain');
+}  <span class="m">// pipeline() does this for you</span></pre></div>
+    </div>
+  </section>
+
+  <!-- SCENE 3 -->
+  <section class="scene" id="scene-line" aria-labelledby="h-line" hidden>
+    <div class="scene-head">
+      <h2 id="h-line">3 · Assembly line</h2>
+      <p>A file is read, compressed and sent to a user. Halfway through, the compress machine breaks. Who cleans up?</p>
+    </div>
+    <div class="map">
+      <div><b>Real world</b>A factory line with three machines</div>
+      <div><b>In Node</b>.pipe() links machines one pair at a time · pipeline() manages the whole line</div>
+      <div><b>Watch</b>The other two machines after the break</div>
+    </div>
+    <div class="controls">
+      <span class="seg" role="group" aria-label="How the machines are connected">
+        <button type="button" id="l-pipe" aria-pressed="true">.pipe()</button>
+        <button type="button" id="l-pipeline" aria-pressed="false">pipeline()</button>
+      </span>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="l-start">Start</button>
+      <button type="button" class="btn danger" id="l-break" disabled>Break the compressor</button>
+      <button type="button" class="btn ghost" id="l-reset">Reset</button>
+    </div>
+    <div class="banner info" id="l-banner">Press Start, then press “Break the compressor” while it runs.</div>
+    <div class="line-wrap">
+      <div class="line" id="l-line">
+        <div class="belt"></div>
+        <div class="st3" id="l-s1" style="left:12%"><h3>Read file</h3><code>createReadStream()</code><span class="pill idle" id="l-p1">Idle</span></div>
+        <div class="st3" id="l-s2" style="left:50%"><h3>Compress</h3><code>createGzip()</code><span class="pill idle" id="l-p2">Idle</span></div>
+        <div class="st3" id="l-s3" style="left:88%"><h3>Send to user</h3><code>res</code><span class="pill idle" id="l-p3">Idle</span></div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>Chunks delivered</b><span id="l-got">0 / 24</span></div>
+      <div class="stat"><b>Files left open</b><span id="l-open">0</span></div>
+      <div class="stat"><b>User waiting</b><span id="l-wait" class="timer">–</span></div>
+    </div>
+    <div class="code-grid">
+      <div><h4>.pipe()</h4><pre class="code">src.pipe(gzip).pipe(res);
+<span class="m">// gzip fails: src stays open, res never ends</span></pre></div>
+      <div><h4>pipeline()</h4><pre class="code"><span class="k">try</span> {
+  <span class="k">await</span> pipeline(src, gzip, res);
+} <span class="k">catch</span> (err) { <span class="m">/* all three already closed */</span> }</pre></div>
+    </div>
+  </section>
+
+  <footer>Numbers are simplified to make the idea visible. The live terminal demo shows the real measurements.</footer>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const fmt = (mb) => mb >= 1000 ? (mb / 1024).toFixed(2) + ' GB' : Math.round(mb) + ' MB';
+
+  /* ---------- routing ---------- */
+  const scenes = ['tank', 'kitchen', 'line'];
+  function show() {
+    const name = scenes.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'tank';
+    scenes.forEach((s) => {
+      $('scene-' + s).hidden = s !== name;
+      const tab = $('tab-' + s);
+      if (s === name) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current');
+    });
+  }
+  window.addEventListener('hashchange', show);
+  show();
+
+  function seg(a, b, onChange) {
+    const set = (which) => { a.setAttribute('aria-pressed', which === a); b.setAttribute('aria-pressed', which === b); onChange(which === b); };
+    a.addEventListener('click', () => set(a));
+    b.addEventListener('click', () => set(b));
+  }
+
+  /* ---------- Scene 1: tank or tap ---------- */
+  const T = { stream: false, users: 5, size: 500, run: false, raf: 0 };
+  const LIMIT = 2048, TANK_MAX = 2600, BASE = 60, DISK = 400, NET = 2.5; // NET speeds up downloads so the scene fits in ~10 s
+  const SPEEDS = [60, 25, 90, 40, 70, 30, 100, 50, 35, 80];
+  const NAMES = ['Asha', 'Ravi', 'Meera', 'Karan', 'Priya', 'Vikram', 'Neha', 'Arjun', 'Divya', 'Sahil'];
+  $('t-limit').style.bottom = (LIMIT / TANK_MAX * 100) + '%';
+
+  function tBuild() {
+    const list = $('t-users-list');
+    list.innerHTML = '';
+    T.list = [];
+    for (let i = 0; i < T.users; i++) {
+      const row = document.createElement('div');
+      row.className = 'user';
+      row.innerHTML = `<span class="who">${NAMES[i]}<small>${SPEEDS[i]} MB/s</small></span><div class="bar"><i></i></div><span class="st">waiting</span>`;
+      list.appendChild(row);
+      T.list.push({ row, bar: row.querySelector('.bar'), fill: row.querySelector('i'), st: row.querySelector('.st'),
+        speed: SPEEDS[i], start: i * 0.25, phase: 'wait', loaded: 0, sent: 0 });
+    }
+    $('t-done').textContent = `0 / ${T.users}`;
+  }
+  function tSetMem(mem) {
+    T.peak = Math.max(T.peak, mem);
+    $('t-mem').textContent = fmt(mem);
+    $('t-peak').textContent = 'peak ' + fmt(T.peak);
+    $('t-peak2').textContent = fmt(T.peak);
+    $('t-fill').style.height = Math.min(100, mem / TANK_MAX * 100) + '%';
+    $('t-tank').classList.toggle('over', mem > LIMIT);
+  }
+  function tReset() {
+    cancelAnimationFrame(T.raf);
+    T.run = false; T.t = 0; T.peak = BASE; T.ttfb = null; T.crashed = false;
+    tBuild(); tSetMem(BASE);
+    $('t-ttfb').textContent = '–';
+    $('t-start').disabled = false;
+    const b = $('t-banner'); b.className = 'banner info';
+    b.textContent = T.stream
+      ? `Stream mode: each user gets the file in 64 KB pieces. Press Start.`
+      : `Load mode: each request reads the whole ${fmt(T.size)} file into memory first. Press Start.`;
+  }
+  function tStep(now) {
+    const dt = Math.min(0.05, (now - (T.last || now)) / 1000); T.last = now; T.t += dt;
+    let mem = BASE, done = 0;
+    for (const u of T.list) {
+      if (T.t < u.start) continue;
+      if (u.phase === 'wait') u.phase = T.stream ? 'send' : 'load';
+      if (u.phase === 'load') {
+        u.loaded = Math.min(T.size, u.loaded + DISK * dt);
+        u.bar.className = 'bar loading'; u.fill.style.width = (u.loaded / T.size * 100) + '%';
+        u.st.textContent = `loading into RAM ${Math.round(u.loaded / T.size * 100)}%`; u.st.className = 'st';
+        if (u.loaded >= T.size) { u.phase = 'send'; }
+      } else if (u.phase === 'send') {
+        if (T.ttfb === null) { T.ttfb = T.t - u.start; $('t-ttfb').textContent = T.ttfb.toFixed(1) + ' s'; }
+        u.sent = Math.min(T.size, u.sent + u.speed * NET * dt);
+        u.bar.className = 'bar'; u.fill.style.width = (u.sent / T.size * 100) + '%';
+        u.st.textContent = `downloading ${Math.round(u.sent / T.size * 100)}%`; u.st.className = 'st';
+        if (u.sent >= T.size) { u.phase = 'done'; u.st.textContent = 'done'; u.st.className = 'st good'; }
+      }
+      if (u.phase === 'load') mem += u.loaded;
+      if (u.phase === 'send') mem += T.stream ? 0.125 : T.size;
+      if (u.phase === 'done') done++;
+    }
+    tSetMem(mem);
+    $('t-done').textContent = `${done} / ${T.users}`;
+    if (mem > LIMIT) {
+      T.run = false; T.crashed = true;
+      for (const u of T.list) if (u.phase !== 'done') { u.bar.className = 'bar dead'; u.st.textContent = 'connection lost'; u.st.className = 'st bad'; }
+      const b = $('t-banner'); b.className = 'banner bad';
+      b.textContent = `Server crashed: out of memory at ${fmt(mem)}. Every user lost their download.`;
+      $('t-start').disabled = true;
+      return;
+    }
+    if (done === T.users) {
+      T.run = false;
+      const b = $('t-banner'); b.className = 'banner ok';
+      b.textContent = T.stream
+        ? `All ${T.users} users finished. Memory never went above ${fmt(T.peak)}.`
+        : `It survived this time, but memory reached ${fmt(T.peak)}. Try more users or a bigger file.`;
+      $('t-start').disabled = true;
+      return;
+    }
+    T.raf = requestAnimationFrame(tStep);
+  }
+  $('t-start').addEventListener('click', () => {
+    if (T.run) return; tReset(); T.run = true; T.last = 0; $('t-start').disabled = true;
+    const b = $('t-banner'); b.className = 'banner info'; b.textContent = `${T.users} users clicked Download at almost the same time…`;
+    T.raf = requestAnimationFrame(tStep);
+  });
+  $('t-reset').addEventListener('click', tReset);
+  $('t-users').addEventListener('input', (e) => { T.users = +e.target.value; $('t-users-out').textContent = T.users; tReset(); });
+  $('t-size').addEventListener('change', (e) => { T.size = +e.target.value; tReset(); });
+  seg($('t-mode-load'), $('t-mode-stream'), (s) => { T.stream = s; tReset(); });
+  tReset();
+
+  /* ---------- Scene 2: kitchen ---------- */
+  const K = { bp: false, speed: 3, run: false, raf: 0 };
+  const ORDERS = 36, CHEF = 8, HWM = 4, FALL = 25;
+  function kLog(html) {
+    const d = document.createElement('div'); d.innerHTML = html;
+    $('k-log').prepend(d);
+    while ($('k-log').children.length > 6) $('k-log').lastChild.remove();
+  }
+  function kPill(id, cls, text) { const p = $(id); p.className = 'pill ' + cls; p.textContent = text; }
+  function kDraw() {
+    const c = $('k-counter'); c.innerHTML = '';
+    const shown = Math.max(K.waiting, K.bp ? HWM : 0);
+    for (let i = 0; i < shown; i++) {
+      const p = document.createElement('div');
+      p.className = i < K.waiting ? 'plate' : 'plate slot';
+      c.appendChild(p);
+    }
+    c.classList.toggle('over', !K.bp && K.waiting > 12);
+    $('k-wait').textContent = K.waiting; $('k-max').textContent = K.max;
+    $('k-cooked').textContent = K.cooked; $('k-served').textContent = K.served;
+  }
+  function kReset() {
+    cancelAnimationFrame(K.raf);
+    Object.assign(K, { run: false, cooked: 0, served: 0, waiting: 0, max: 0, chefAcc: 0, waitAcc: 0, paused: false });
+    $('k-log').innerHTML = '';
+    $('k-start').disabled = false;
+    $('k-counter-note').textContent = K.bp ? `Waiting area: ${HWM} plates (highWaterMark)` : `Holds up to ${FALL} plates before they fall off`;
+    kPill('k-chef', 'idle', 'Waiting for orders'); kPill('k-waiter', 'idle', 'Waiting');
+    const b = $('k-banner'); b.className = 'banner info';
+    b.textContent = K.bp
+      ? `Backpressure on: when ${HWM} plates are waiting, the waiter says “stop”. Press Start.`
+      : `${ORDERS} orders are coming in. The chef cooks ${CHEF} plates a second and never stops. Press Start.`;
+    kDraw();
+  }
+  function kStep(now) {
+    const dt = Math.min(0.05, (now - (K.last || now)) / 1000); K.last = now;
+    // chef
+    if (K.cooked < ORDERS && !K.paused) {
+      K.chefAcc += CHEF * dt;
+      while (K.chefAcc >= 1 && K.cooked < ORDERS && !K.paused) {
+        K.chefAcc -= 1; K.cooked++; K.waiting++;
+        if (K.bp && K.waiting >= HWM) {
+          K.paused = true;
+          kLog(`<span class="p">write() → false</span>  counter full, chef pauses`);
+        }
+      }
+    }
+    // waiter
+    if (K.waiting > 0) {
+      K.waitAcc += K.speed * dt;
+      while (K.waitAcc >= 1 && K.waiting > 0) {
+        K.waitAcc -= 1; K.waiting--; K.served++;
+        if (K.bp && K.paused && K.waiting === 0) {
+          K.paused = false; K.chefAcc = 0;
+          kLog(`<span class="c">'drain'</span>  counter empty, chef continues`);
+        }
+      }
+    } else K.waitAcc = 0;
+    K.max = Math.max(K.max, K.waiting);
+    kPill('k-chef', K.cooked >= ORDERS ? 'idle' : K.paused ? 'stop' : 'go', K.cooked >= ORDERS ? 'All cooked' : K.paused ? 'Paused: “stop”' : 'Cooking');
+    kPill('k-waiter', K.waiting > 0 ? 'go' : 'idle', K.waiting > 0 ? 'Serving' : 'Waiting');
+    kDraw();
+    if (!K.bp && K.waiting >= FALL) {
+      K.run = false; $('k-start').disabled = true;
+      kPill('k-chef', 'stop', 'Kitchen closed'); kPill('k-waiter', 'stop', 'Stopped');
+      kLog(`<span class="p">FATAL</span>  JavaScript heap out of memory`);
+      const b = $('k-banner'); b.className = 'banner bad';
+      b.textContent = `${K.waiting} plates piled up and fell off the counter. In Node, this is the server running out of memory.`;
+      return;
+    }
+    if (K.served >= ORDERS) {
+      K.run = false; $('k-start').disabled = true;
+      kPill('k-waiter', 'idle', 'All served');
+      const b = $('k-banner'); b.className = 'banner ok';
+      b.textContent = `All ${ORDERS} plates served. At most ${K.max} plates ever waited on the counter.`;
+      return;
+    }
+    K.raf = requestAnimationFrame(kStep);
+  }
+  $('k-start').addEventListener('click', () => {
+    if (K.run) return; kReset(); K.run = true; K.last = 0; $('k-start').disabled = true;
+    const b = $('k-banner'); b.className = 'banner info'; b.textContent = 'Orders are coming in…';
+    K.raf = requestAnimationFrame(kStep);
+  });
+  $('k-reset').addEventListener('click', kReset);
+  $('k-speed').addEventListener('input', (e) => { K.speed = +e.target.value; $('k-speed-out').textContent = K.speed + '/s'; });
+  seg($('k-bp-off'), $('k-bp-on'), (on) => { K.bp = on; kReset(); });
+  kReset();
+
+  /* ---------- Scene 3: assembly line ---------- */
+  const L = { pipeline: false, run: false, raf: 0 };
+  const TOTAL = 24, X1 = 12, X2 = 50, X3 = 88, SPEED = 16, EVERY = 0.35;
+  function lPill(n, cls, text) { const p = $('l-p' + n); p.className = 'pill ' + cls; p.textContent = text; }
+  function lReset() {
+    cancelAnimationFrame(L.raf);
+    Object.assign(L, { run: false, t: 0, spawned: 0, got: 0, broken: false, over: false, waitStart: 0, chunks: [] });
+    $('l-line').querySelectorAll('.chunk').forEach((c) => c.remove());
+    ['l-s1', 'l-s2', 'l-s3'].forEach((id) => $(id).className = 'st3');
+    [1, 2, 3].forEach((n) => lPill(n, 'idle', 'Idle'));
+    $('l-got').textContent = `0 / ${TOTAL}`; $('l-open').textContent = '0'; $('l-wait').textContent = '–';
+    $('l-start').disabled = false; $('l-break').disabled = true;
+    const b = $('l-banner'); b.className = 'banner info';
+    b.textContent = `Connected with ${L.pipeline ? 'pipeline()' : '.pipe()'}. Press Start, then “Break the compressor” while it runs.`;
+  }
+  function lStep(now) {
+    const dt = Math.min(0.05, (now - (L.last || now)) / 1000); L.last = now; L.t += dt;
+    const readerOn = !L.broken && L.spawned < TOTAL;
+    if (readerOn && L.t >= L.spawned * EVERY) {
+      const el = document.createElement('div'); el.className = 'chunk';
+      $('l-line').appendChild(el);
+      L.chunks.push({ el, x: X1, small: false, stuck: false }); L.spawned++;
+    }
+    let stuckCount = 0;
+    for (const c of L.chunks) {
+      if (c.done) continue;
+      if (L.broken && L.pipeline) continue;
+      if (L.broken && !c.small && c.x >= X2 - 6) {
+        c.stuck = true; c.el.classList.add('stuck');
+        c.x = X2 - 6 - stuckCount * 2.2; stuckCount++;
+      } else {
+        c.x += SPEED * dt;
+        if (!c.small && c.x >= X2) { c.small = true; c.el.classList.add('small'); }
+        if (c.x >= X3) { c.done = true; c.el.remove(); L.got++; }
+      }
+      if (!c.done) c.el.style.left = c.x + '%';
+    }
+    $('l-got').textContent = `${L.got} / ${TOTAL}`;
+    if (!L.broken) {
+      lPill(1, L.spawned < TOTAL ? 'go' : 'idle', L.spawned < TOTAL ? 'Reading' : 'Done');
+      lPill(2, 'go', 'Compressing'); lPill(3, 'go', 'Sending');
+      if (L.got >= TOTAL) {
+        L.run = false; $('l-break').disabled = true;
+        [1, 2, 3].forEach((n) => lPill(n, 'idle', 'Finished'));
+        const b = $('l-banner'); b.className = 'banner ok'; b.textContent = 'All chunks delivered. Press Reset and try breaking the compressor this time.';
+        return;
+      }
+    } else if (!L.pipeline) {
+      const w = L.t - L.waitStart;
+      $('l-wait').textContent = w.toFixed(0) + ' s';
+      lPill(1, 'stop', 'Paused · file still open');
+      if (w > 8 && !L.over) {
+        L.over = true;
+        const b = $('l-banner'); b.className = 'banner bad';
+        b.textContent = 'The user is still waiting, and the file is still open. Nobody told the other two machines to stop. Every failed request leaks like this.';
+      }
+      if (w > 60) { L.run = false; return; }
+    }
+    L.raf = requestAnimationFrame(lStep);
+  }
+  $('l-start').addEventListener('click', () => {
+    if (L.run) return; lReset(); L.run = true; L.last = 0;
+    $('l-start').disabled = true; $('l-break').disabled = false;
+    const b = $('l-banner'); b.className = 'banner info'; b.textContent = 'The line is running…';
+    L.raf = requestAnimationFrame(lStep);
+  });
+  $('l-break').addEventListener('click', () => {
+    if (!L.run || L.broken) return;
+    L.broken = true; L.waitStart = L.t; $('l-break').disabled = true;
+    $('l-s2').className = 'st3 dead'; lPill(2, 'stop', 'Error!');
+    const b = $('l-banner');
+    if (L.pipeline) {
+      ['l-s1', 'l-s3'].forEach((id) => $(id).className = 'st3 closed');
+      lPill(1, 'idle', 'Closed'); lPill(3, 'idle', 'Closed · error sent');
+      L.chunks.forEach((c) => c.el.classList.add('gone'));
+      $('l-open').textContent = '0'; $('l-wait').textContent = '0 s';
+      b.className = 'banner ok';
+      b.textContent = 'pipeline() closed all three machines and threw one error. Caught in try/catch, the user gets an error page right away, and nothing is left open.';
+      L.run = false;
+    } else {
+      lPill(3, 'stop', 'Waiting forever…');
+      $('l-open').textContent = '1';
+      b.className = 'banner bad';
+      b.textContent = 'The compressor broke. Watch the other two machines…';
+    }
+  });
+  $('l-reset').addEventListener('click', lReset);
+  seg($('l-pipe'), $('l-pipeline'), (p) => { L.pipeline = p; lReset(); });
+  lReset();
+})();
+</script>
+
+</body></html>
